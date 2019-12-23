@@ -43,15 +43,10 @@ namespace Paramore.Brighter.DynamoDB.Tests.Outbox
         protected IAmazonDynamoDB CreateClient()
         {
             Credentials = new BasicAWSCredentials("FakeAccessKey", "FakeSecretKey");
-            
-            var clientConfig = new AmazonDynamoDBConfig
-            {
-                ServiceURL = "http://localhost:8000"
 
-            };
+            var clientConfig = new AmazonDynamoDBConfig {ServiceURL = "http://localhost:8000"};
 
             return new AmazonDynamoDBClient(Credentials, clientConfig);
- 
         }
 
         public void Dispose()

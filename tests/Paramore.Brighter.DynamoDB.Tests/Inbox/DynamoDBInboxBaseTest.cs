@@ -7,7 +7,9 @@ using Paramore.Brighter.DynamoDb.Extensions;
 using Paramore.Brighter.DynamoDB.Tests.TestDoubles;
 using Paramore.Brighter.Inbox.DynamoDB;
 using Paramore.Brighter.Outbox.DynamoDB;
+using Xunit;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 namespace Paramore.Brighter.DynamoDB.Tests.Inbox
 {
     public abstract class DynamoDBInboxBaseTest : IDisposable
@@ -21,7 +23,7 @@ namespace Paramore.Brighter.DynamoDB.Tests.Inbox
         protected DynamoDBInboxBaseTest()
         {
             //required by AWS 2.2
-            Environment.SetEnvironmentVariable("AWS_ENABLE_ENDPOINT_DISCOVERY", "false");
+            Environment.SetEnvironmentVariable("AWS_ENABLE_ENDPOINT_DISCOVERY", "true");
             
             Client = CreateClient();
             _dynamoDbTableBuilder = new DynamoDbTableBuilder(Client);
@@ -43,12 +45,11 @@ namespace Paramore.Brighter.DynamoDB.Tests.Inbox
         private IAmazonDynamoDB CreateClient()
         {
             Credentials = new BasicAWSCredentials("FakeAccessKey", "FakeSecretKey");
-
+            
             var clientConfig = new AmazonDynamoDBConfig();
             clientConfig.ServiceURL = "http://localhost:8000";
-
+            
             return new AmazonDynamoDBClient(Credentials, clientConfig);
- 
         }
 
         public void Dispose()

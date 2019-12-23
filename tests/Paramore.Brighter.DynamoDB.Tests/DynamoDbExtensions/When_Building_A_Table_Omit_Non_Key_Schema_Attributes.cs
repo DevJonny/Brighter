@@ -47,15 +47,11 @@ namespace Paramore.Brighter.DynamoDB.Tests.DynamoDbExtensions
         private AmazonDynamoDBClient CreateClient()
         {
             var credentials = new BasicAWSCredentials("FakeAccessKey", "FakeSecretKey");
-
-            var clientConfig = new AmazonDynamoDBConfig();
-            clientConfig.ServiceURL = "http://localhost:8000";
-
+            var clientConfig = new AmazonDynamoDBConfig {ServiceURL = "http://localhost:8000"};
+            
             return new AmazonDynamoDBClient(credentials, clientConfig);
- 
         }
 
-        
         [DynamoDBTable("MyEntity")]
         private class DynamoDbEntity
         {
