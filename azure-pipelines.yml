@@ -166,7 +166,7 @@ steps:
   timeoutInMinutes: 5
   inputs:
     command: 'test'
-    arguments: 'tests\Paramore.Brighter.DynamoDB.Tests\Paramore.Brighter.DynamoDB.Tests.csproj -v n --configuration $(buildConfiguration) --no-build'
+    arguments: 'tests\Paramore.Brighter.DynamoDB.Tests\Paramore.Brighter.DynamoDB.Tests.csproj -v normal --configuration $(buildConfiguration) --no-build'
     testRunTitle: 'DynamoDB tests running on ubuntu'
 
 - task: DotNetCoreCLI@2
