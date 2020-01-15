@@ -31,6 +31,8 @@ using Xunit;
 using Polly.Registry;
 using TinyIoC;
 
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace Paramore.Brighter.Core.Tests.Timeout
 {
     public class TimeoutHandlerFailsCheckTests : IDisposable
