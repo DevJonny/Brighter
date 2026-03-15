@@ -31,6 +31,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Neuroglia;
 using Neuroglia.AsyncApi.v3;
 
@@ -49,21 +50,32 @@ namespace Paramore.Brighter.AsyncAPI
             Dictionary<string, V3MessageDefinition> Messages,
             HashSet<(string ChannelId, string Action)> CoveredChannelActions);
 
+        private static readonly JsonElement s_emptyObject;
+
+        static AsyncApiDocumentGenerator()
+        {
+            using var doc = JsonDocument.Parse("{}");
+            s_emptyObject = doc.RootElement.Clone();
+        }
+
         private readonly AsyncApiOptions _options;
         private readonly IAmASchemaGenerator _schemaGenerator;
         private readonly IEnumerable<Subscription>? _subscriptions;
         private readonly IEnumerable<Publication>? _publications;
+        private readonly ILogger _logger;
 
         public AsyncApiDocumentGenerator(
             AsyncApiOptions options,
             IAmASchemaGenerator schemaGenerator,
             IEnumerable<Subscription>? subscriptions,
-            IEnumerable<Publication>? publications)
+            IEnumerable<Publication>? publications,
+            ILogger logger)
         {
             _options = options;
             _schemaGenerator = schemaGenerator;
             _subscriptions = subscriptions;
             _publications = publications;
+            _logger = logger;
         }
 
         public async Task<V3AsyncApiDocument> GenerateAsync(CancellationToken ct = default)
@@ -195,10 +207,13 @@ namespace Paramore.Brighter.AsyncAPI
 
             foreach (var assembly in assemblies)
             {
-                foreach (var (type, topic) in GetPublicationTopicTypes(assembly))
+                foreach (var (type, topic) in GetPublicationTopicTypes(assembly, _logger))
                 {
                     var channelId = SanitizeChannelId(topic);
 
+                    // Skip channels already covered by explicit Publication registrations.
+                    // Assembly scanning only discovers send operations (via PublicationTopicAttribute),
+                    // so we only need to check for "send" duplicates.
                     if (context.CoveredChannelActions.Contains((channelId, "send"))) continue;
 
                     EnsureChannel(context.Channels, channelId, topic);
@@ -221,7 +236,7 @@ namespace Paramore.Brighter.AsyncAPI
             }
         }
 
-        private static IEnumerable<(Type type, string topic)> GetPublicationTopicTypes(Assembly assembly)
+        private static IEnumerable<(Type type, string topic)> GetPublicationTopicTypes(Assembly assembly, ILogger logger)
         {
             Type[] types;
             try
@@ -230,6 +245,13 @@ namespace Paramore.Brighter.AsyncAPI
             }
             catch (ReflectionTypeLoadException ex)
             {
+                logger.LogWarning(
+                    ex,
+                    "Some types in assembly {AssemblyName} could not be loaded during AsyncAPI scanning; {LoadedCount} of {TotalCount} types loaded. Loader exceptions: {LoaderExceptions}",
+                    assembly.FullName,
+                    ex.Types.Count(t => t != null),
+                    ex.Types.Length,
+                    string.Join("; ", ex.LoaderExceptions?.Select(e => e?.Message) ?? Array.Empty<string>()));
                 types = ex.Types.Where(t => t != null).ToArray()!;
             }
 
@@ -281,7 +303,6 @@ namespace Paramore.Brighter.AsyncAPI
         {
             if (!messages.TryGetValue(messageName, out _))
             {
-                using var emptyDoc = JsonDocument.Parse("{}");
                 var message = new V3MessageDefinition
                 {
                     Name = messageName,
@@ -289,7 +310,7 @@ namespace Paramore.Brighter.AsyncAPI
                     Payload = new V3SchemaDefinition
                     {
                         SchemaFormat = "application/schema+json;version=draft-07",
-                        Schema = emptyDoc.RootElement.Clone()
+                        Schema = s_emptyObject
                     }
                 };
 
@@ -327,11 +348,10 @@ namespace Paramore.Brighter.AsyncAPI
 
         private static V3SchemaDefinition EmptyObjectSchema()
         {
-            using var doc = JsonDocument.Parse("{}");
             return new V3SchemaDefinition
             {
                 SchemaFormat = "application/schema+json;version=draft-07",
-                Schema = doc.RootElement.Clone()
+                Schema = s_emptyObject
             };
         }
 

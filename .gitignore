@@ -341,3 +341,7 @@ tests/certs/
 # Ralph loop
 RALPH_STOP
 ralph.log
+progress.txt
+scripts/ralph/prd.json
+scripts/ralph/progress.txt
+docs/features/*/RESEARCH.md

@@ -28,6 +28,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using FakeItEasy;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Neuroglia.AsyncApi.v3;
 using Xunit;
 
@@ -76,7 +78,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                     messagePumpType: MessagePumpType.Reactor)
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             // One channel for the shared topic
@@ -114,7 +116,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = new RoutingKey("shared.topic"), RequestType = typeof(SharedEvent) }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Channels);
@@ -145,7 +147,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                     messagePumpType: MessagePumpType.Reactor)
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Components?.Messages);
@@ -169,7 +171,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
             // Combine: producer registry publications first, supplemental second
             var allPubs = producerPubs.Concat(supplementalPubs).ToArray();
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, allPubs);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, allPubs, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Operations);

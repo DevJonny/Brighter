@@ -34,6 +34,11 @@ namespace Paramore.Brighter.AsyncAPI
     /// Implementations should return a <see cref="V3SchemaDefinition"/> wrapping the schema.
     /// When <paramref name="requestType"/> is null or schema generation fails, implementations should
     /// return an empty object schema rather than null.
+    /// <para>
+    /// This interface uses Neuroglia.AsyncApi SDK types directly. Consumers must reference the
+    /// Neuroglia.AsyncApi.Core package. This coupling is intentional — this package is the SDK-backed
+    /// AsyncAPI integration layer and wrapping SDK types would add indirection without value.
+    /// </para>
     /// </summary>
     public interface IAmASchemaGenerator
     {

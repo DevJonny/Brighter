@@ -22,27 +22,29 @@ THE SOFTWARE. */
 
 #endregion
 
-using System.Threading;
-using System.Threading.Tasks;
-using Neuroglia.AsyncApi.v3;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Paramore.Brighter.AsyncAPI;
 
-namespace Paramore.Brighter.AsyncAPI
+namespace Paramore.Brighter.AsyncAPI.NJsonSchema
 {
     /// <summary>
-    /// Generates an AsyncAPI 3.0 document describing the messaging channels, operations, and message schemas
-    /// for a Brighter application based on its registered subscriptions, publications, and assembly-scanned types.
-    /// <para>
-    /// Returns a <see cref="V3AsyncApiDocument"/> from the Neuroglia.AsyncApi SDK. This coupling is
-    /// intentional — this package provides the SDK-backed AsyncAPI integration layer.
-    /// </para>
+    /// Extension methods for explicitly registering <see cref="NJsonSchemaGenerator"/> as the
+    /// <see cref="IAmASchemaGenerator"/> implementation. This avoids the reflection-based auto-discovery
+    /// in <c>UseAsyncApi()</c> and is the recommended approach for trimmed or AOT-published applications.
     /// </summary>
-    public interface IAmAnAsyncApiDocumentGenerator
+    public static class NJsonSchemaServiceCollectionExtensions
     {
         /// <summary>
-        /// Generates the AsyncAPI document from all configured sources (subscriptions, publications, assembly scanning).
+        /// Registers <see cref="NJsonSchemaGenerator"/> as the <see cref="IAmASchemaGenerator"/> implementation.
+        /// Call this before <c>UseAsyncApi()</c> to bypass reflection-based discovery.
         /// </summary>
-        /// <param name="ct">Cancellation token.</param>
-        /// <returns>The generated AsyncAPI document.</returns>
-        Task<V3AsyncApiDocument> GenerateAsync(CancellationToken ct = default);
+        /// <param name="services">The service collection.</param>
+        /// <returns>The service collection for chaining.</returns>
+        public static IServiceCollection UseNJsonSchemaGenerator(this IServiceCollection services)
+        {
+            services.TryAddSingleton<IAmASchemaGenerator, NJsonSchemaGenerator>();
+            return services;
+        }
     }
 }

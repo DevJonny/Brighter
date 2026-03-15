@@ -27,6 +27,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using FakeItEasy;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Neuroglia.AsyncApi.v3;
 using Xunit;
 
@@ -64,7 +66,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = new RoutingKey("order.created"), RequestType = typeof(TestOrderEvent) }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Channels);
@@ -88,7 +90,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = new RoutingKey("order.created"), RequestType = null }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Components?.Messages);
@@ -103,7 +105,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = null, RequestType = typeof(TestOrderEvent) }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Channels);
@@ -118,7 +120,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = new RoutingKey(""), RequestType = typeof(TestOrderEvent) }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Channels);
@@ -128,7 +130,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
         [Fact]
         public async Task It_Should_Handle_Null_Publications()
         {
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Channels);
@@ -164,7 +166,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 new Publication { Topic = new RoutingKey("order.created"), RequestType = typeof(TestOrderEvent) }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             var payload = (JsonElement)result.Components!.Messages!["TestOrderEvent"].Payload!.Schema;

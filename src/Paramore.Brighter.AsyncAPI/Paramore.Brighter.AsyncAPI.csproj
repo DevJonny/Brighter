@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Description>AsyncAPI 3.0 document generation for Paramore.Brighter. Auto-generates AsyncAPI specifications from registered subscriptions, publications, and assembly-scanned message types.</Description>
+    <PackageTags>AsyncAPI;OpenAPI;API Documentation;Schema;Messaging;Command;Event;Command Processor;Service Activator;Brighter</PackageTags>
     <TargetFrameworks>$(BrighterCoreTargetFrameworks)</TargetFrameworks>
+    <!-- Neuroglia.AsyncApi SDK is not strong-named; assemblies that reference it cannot be signed -->
     <SignAssembly>false</SignAssembly>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

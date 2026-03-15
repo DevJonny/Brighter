@@ -27,6 +27,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using FakeItEasy;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Neuroglia.AsyncApi.v3;
 using Xunit;
 
@@ -58,7 +60,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 AssembliesToScan = new[] { typeof(ScannableEvent).Assembly }
             };
 
-            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Channels);
@@ -84,7 +86,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 AssembliesToScan = new[] { typeof(ScannableEvent).Assembly }
             };
 
-            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Operations);
@@ -109,7 +111,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 }
             };
 
-            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Operations);
@@ -146,7 +148,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 }
             };
 
-            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, publications);
+            var generator = new AsyncApiDocumentGenerator(options, _schemaGenerator, null, publications, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Operations);

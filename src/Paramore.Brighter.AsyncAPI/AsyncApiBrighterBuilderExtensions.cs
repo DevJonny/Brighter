@@ -110,7 +110,7 @@ namespace Paramore.Brighter.AsyncAPI
                     }
                 }
 
-                return new AsyncApiDocumentGenerator(resolvedOptions, schemaGenerator, subscriptions, allPublications);
+                return new AsyncApiDocumentGenerator(resolvedOptions, schemaGenerator, subscriptions, allPublications, logger);
             });
 
             return builder;

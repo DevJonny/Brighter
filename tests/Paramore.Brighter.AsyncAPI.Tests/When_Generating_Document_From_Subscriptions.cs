@@ -28,6 +28,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using FakeItEasy;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Neuroglia.AsyncApi.v3;
 using Xunit;
 
@@ -70,7 +72,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                     messagePumpType: MessagePumpType.Reactor)
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Channels);
@@ -100,7 +102,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                     messagePumpType: MessagePumpType.Reactor)
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Components?.Messages);
@@ -120,7 +122,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                     messagePumpType: MessagePumpType.Reactor)
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, subscriptions, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Channels);
@@ -130,7 +132,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
         [Fact]
         public async Task It_Should_Handle_Null_Subscriptions()
         {
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.Empty(result.Channels);
@@ -149,7 +151,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             Assert.NotNull(result.Servers);
@@ -169,7 +171,7 @@ namespace Paramore.Brighter.AsyncAPI.Tests
                 }
             };
 
-            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null);
+            var generator = new AsyncApiDocumentGenerator(_options, _schemaGenerator, null, null, NullLogger.Instance);
             var result = await generator.GenerateAsync();
 
             // Mutate options after generation
