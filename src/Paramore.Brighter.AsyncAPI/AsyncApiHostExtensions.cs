@@ -65,10 +65,23 @@ namespace Paramore.Brighter.AsyncAPI
                 Directory.CreateDirectory(directory);
             }
 
-            // Determine JSON file path
-            var jsonPath = outputPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-                ? outputPath
-                : $"{outputPath}.json";
+            // Determine JSON file path. Normalize .yaml/.yml inputs so callers don't end up
+            // with files like "asyncapi.yaml.json" — both formats are written, anchored on the
+            // base name without extension.
+            string jsonPath;
+            if (outputPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                jsonPath = outputPath;
+            }
+            else if (outputPath.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)
+                  || outputPath.EndsWith(".yml", StringComparison.OrdinalIgnoreCase))
+            {
+                jsonPath = Path.ChangeExtension(outputPath, ".json");
+            }
+            else
+            {
+                jsonPath = $"{outputPath}.json";
+            }
 
             // Write JSON
             using (var jsonStream = new FileStream(jsonPath, FileMode.Create, FileAccess.Write))

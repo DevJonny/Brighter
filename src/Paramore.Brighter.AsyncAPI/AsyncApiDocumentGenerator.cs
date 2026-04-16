@@ -48,6 +48,7 @@ namespace Paramore.Brighter.AsyncAPI
             Dictionary<string, V3ChannelDefinition> Channels,
             Dictionary<string, V3OperationDefinition> Operations,
             Dictionary<string, V3MessageDefinition> Messages,
+            Dictionary<string, Type> MessageTypeByKey,
             HashSet<(string ChannelId, string Action)> CoveredChannelActions);
 
         private static readonly JsonElement s_emptyObject;
@@ -84,6 +85,7 @@ namespace Paramore.Brighter.AsyncAPI
                 new Dictionary<string, V3ChannelDefinition>(),
                 new Dictionary<string, V3OperationDefinition>(),
                 new Dictionary<string, V3MessageDefinition>(),
+                new Dictionary<string, Type>(),
                 new HashSet<(string ChannelId, string Action)>());
 
             await AddSubscriptionsAsync(context, ct).ConfigureAwait(false);
@@ -155,23 +157,26 @@ namespace Paramore.Brighter.AsyncAPI
             GenerationContext context,
             CancellationToken ct)
         {
-            var channelId = SanitizeChannelId(address);
+            var channelId = GetUniqueChannelId(context.Channels, address);
 
             EnsureChannel(context.Channels, channelId, address);
 
+            string messageKey;
             string messageName;
             if (requestType != null)
             {
+                messageKey = GetUniqueMessageKey(context.MessageTypeByKey, requestType);
                 messageName = requestType.Name;
-                await EnsureMessageAsync(context.Messages, messageName, requestType, ct).ConfigureAwait(false);
+                await EnsureMessageAsync(context.Messages, context.MessageTypeByKey, messageKey, messageName, requestType, ct).ConfigureAwait(false);
             }
             else
             {
-                messageName = $"{channelId}Message";
-                EnsurePlaceholderMessage(context.Messages, messageName);
+                messageKey = $"{channelId}Message";
+                messageName = messageKey;
+                EnsurePlaceholderMessage(context.Messages, messageKey, messageName);
             }
 
-            AddChannelMessageRef(context.Channels, channelId, messageName);
+            AddChannelMessageRef(context.Channels, channelId, messageKey);
 
             var actionString = action == V3OperationAction.Send ? "send" : "receive";
             context.CoveredChannelActions.Add((channelId, actionString));
@@ -183,7 +188,7 @@ namespace Paramore.Brighter.AsyncAPI
                 Channel = new V3ReferenceDefinition { Reference = $"#/channels/{channelId}" },
                 Messages = new EquatableList<V3ReferenceDefinition>
                 {
-                    new V3ReferenceDefinition { Reference = $"#/channels/{channelId}/messages/{messageName}" }
+                    new V3ReferenceDefinition { Reference = $"#/channels/{channelId}/messages/{messageKey}" }
                 }
             };
         }
@@ -209,7 +214,7 @@ namespace Paramore.Brighter.AsyncAPI
             {
                 foreach (var (type, topic) in GetPublicationTopicTypes(assembly, _logger))
                 {
-                    var channelId = SanitizeChannelId(topic);
+                    var channelId = GetUniqueChannelId(context.Channels, topic);
 
                     // Skip channels already covered by explicit Publication registrations.
                     // Assembly scanning only discovers send operations (via PublicationTopicAttribute),
@@ -218,9 +223,10 @@ namespace Paramore.Brighter.AsyncAPI
 
                     EnsureChannel(context.Channels, channelId, topic);
 
+                    var messageKey = GetUniqueMessageKey(context.MessageTypeByKey, type);
                     var messageName = type.Name;
-                    await EnsureMessageAsync(context.Messages, messageName, type, ct).ConfigureAwait(false);
-                    AddChannelMessageRef(context.Channels, channelId, messageName);
+                    await EnsureMessageAsync(context.Messages, context.MessageTypeByKey, messageKey, messageName, type, ct).ConfigureAwait(false);
+                    AddChannelMessageRef(context.Channels, channelId, messageKey);
 
                     var sendOpId = GetUniqueOperationId(context.Operations, "send", channelId);
                     context.Operations[sendOpId] = new V3OperationDefinition
@@ -229,7 +235,7 @@ namespace Paramore.Brighter.AsyncAPI
                         Channel = new V3ReferenceDefinition { Reference = $"#/channels/{channelId}" },
                         Messages = new EquatableList<V3ReferenceDefinition>
                         {
-                            new V3ReferenceDefinition { Reference = $"#/channels/{channelId}/messages/{messageName}" }
+                            new V3ReferenceDefinition { Reference = $"#/channels/{channelId}/messages/{messageKey}" }
                         }
                     };
                 }
@@ -281,9 +287,15 @@ namespace Paramore.Brighter.AsyncAPI
                 });
         }
 
-        private async Task EnsureMessageAsync(Dictionary<string, V3MessageDefinition> messages, string messageName, Type requestType, CancellationToken ct)
+        private async Task EnsureMessageAsync(
+            Dictionary<string, V3MessageDefinition> messages,
+            Dictionary<string, Type> messageTypeByKey,
+            string messageKey,
+            string messageName,
+            Type requestType,
+            CancellationToken ct)
         {
-            if (!messages.TryGetValue(messageName, out _))
+            if (!messages.TryGetValue(messageKey, out _))
             {
                 var schema = await _schemaGenerator.GenerateAsync(requestType, ct).ConfigureAwait(false)
                     ?? EmptyObjectSchema();
@@ -292,16 +304,19 @@ namespace Paramore.Brighter.AsyncAPI
                 {
                     Name = messageName,
                     ContentType = "application/json",
-                    Payload = RewriteEmbeddedSchemaRefs(schema, messageName)
+                    Payload = RewriteEmbeddedSchemaRefs(schema, messageKey)
                 };
 
-                messages.TryAdd(messageName, message);
+                if (messages.TryAdd(messageKey, message))
+                {
+                    messageTypeByKey[messageKey] = requestType;
+                }
             }
         }
 
-        private static void EnsurePlaceholderMessage(Dictionary<string, V3MessageDefinition> messages, string messageName)
+        private static void EnsurePlaceholderMessage(Dictionary<string, V3MessageDefinition> messages, string messageKey, string messageName)
         {
-            if (!messages.TryGetValue(messageName, out _))
+            if (!messages.TryGetValue(messageKey, out _))
             {
                 var message = new V3MessageDefinition
                 {
@@ -314,7 +329,7 @@ namespace Paramore.Brighter.AsyncAPI
                     }
                 };
 
-                messages.TryAdd(messageName, message);
+                messages.TryAdd(messageKey, message);
             }
         }
 
@@ -344,6 +359,44 @@ namespace Paramore.Brighter.AsyncAPI
                 counter++;
 
             return $"{baseId}_{counter}";
+        }
+
+        // SanitizeChannelId can collapse distinct addresses (e.g. "a.b" and "a/b") onto the
+        // same id. Reuse when the existing channel already represents this address; otherwise
+        // disambiguate with a numeric suffix so the second address gets its own channel.
+        private static string GetUniqueChannelId(Dictionary<string, V3ChannelDefinition> channels, string address)
+        {
+            var baseId = SanitizeChannelId(address);
+            if (!channels.TryGetValue(baseId, out var existing) || existing.Address == address)
+                return baseId;
+
+            var counter = 2;
+            while (channels.TryGetValue($"{baseId}_{counter}", out var existingN))
+            {
+                if (existingN.Address == address)
+                    return $"{baseId}_{counter}";
+                counter++;
+            }
+            return $"{baseId}_{counter}";
+        }
+
+        // Two distinct CLR types can share a simple Name (different namespaces or assemblies).
+        // Prefer Type.Name as the component key for readability, but fall back to the sanitized
+        // FullName when a different type already owns that key, so neither message is dropped.
+        private static string GetUniqueMessageKey(Dictionary<string, Type> messageTypeByKey, Type requestType)
+        {
+            var baseKey = requestType.Name;
+            if (!messageTypeByKey.TryGetValue(baseKey, out var existing) || existing == requestType)
+                return baseKey;
+
+            var fullKey = s_sanitizeRegex.Replace(requestType.FullName ?? requestType.Name, "_");
+            if (!messageTypeByKey.TryGetValue(fullKey, out var existingFull) || existingFull == requestType)
+                return fullKey;
+
+            var counter = 2;
+            while (messageTypeByKey.TryGetValue($"{fullKey}_{counter}", out var existingN) && existingN != requestType)
+                counter++;
+            return $"{fullKey}_{counter}";
         }
 
         private static V3SchemaDefinition EmptyObjectSchema()
