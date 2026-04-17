@@ -160,6 +160,7 @@ namespace Paramore.Brighter.AsyncAPI
                 InvokeSubscriptionBindingContributors(subscription, context, channelId, operationId);
 
                 await AddDeadLetterChannelAsync(subscription, channelId, context, ct).ConfigureAwait(false);
+                await AddInvalidMessageChannelAsync(subscription, channelId, context, ct).ConfigureAwait(false);
             }
         }
 
@@ -174,19 +175,59 @@ namespace Paramore.Brighter.AsyncAPI
             var dlqRoutingKey = dlqSupport.DeadLetterRoutingKey;
             if (dlqRoutingKey == null || string.IsNullOrEmpty(dlqRoutingKey.Value)) return;
 
-            var (dlqChannelId, _) = await ProcessSourceAsync(
-                dlqRoutingKey.Value, V3OperationAction.Receive, subscription.RequestType,
+            await AddErrorChannelAsync(
+                subscription,
+                sourceChannelId,
+                dlqRoutingKey.Value,
+                channelRole: "dead-letter",
+                description: $"Dead-letter channel for {subscription.RoutingKey!.Value}",
+                context,
+                ct).ConfigureAwait(false);
+        }
+
+        private async Task AddInvalidMessageChannelAsync(
+            Subscription subscription,
+            string sourceChannelId,
+            GenerationContext context,
+            CancellationToken ct)
+        {
+            if (subscription is not IUseBrighterInvalidMessageSupport invalidSupport) return;
+
+            var invalidRoutingKey = invalidSupport.InvalidMessageRoutingKey;
+            if (invalidRoutingKey == null || string.IsNullOrEmpty(invalidRoutingKey.Value)) return;
+
+            await AddErrorChannelAsync(
+                subscription,
+                sourceChannelId,
+                invalidRoutingKey.Value,
+                channelRole: "invalid-message",
+                description: $"Invalid-message channel for {subscription.RoutingKey!.Value}",
+                context,
+                ct).ConfigureAwait(false);
+        }
+
+        private async Task AddErrorChannelAsync(
+            Subscription subscription,
+            string sourceChannelId,
+            string errorRoutingKey,
+            string channelRole,
+            string description,
+            GenerationContext context,
+            CancellationToken ct)
+        {
+            var (errorChannelId, _) = await ProcessSourceAsync(
+                errorRoutingKey, V3OperationAction.Receive, subscription.RequestType,
                 context, ct).ConfigureAwait(false);
 
-            if (!context.Channels.TryGetValue(dlqChannelId, out var dlqChannel)) return;
+            if (!context.Channels.TryGetValue(errorChannelId, out var errorChannel)) return;
 
-            dlqChannel.Description ??= $"Dead-letter channel for {subscription.RoutingKey!.Value}";
+            errorChannel.Description ??= description;
 
-            var channelExtensions = context.ChannelExtensions.TryGetValue(dlqChannelId, out var existing)
+            var channelExtensions = context.ChannelExtensions.TryGetValue(errorChannelId, out var existing)
                 ? existing
-                : context.ChannelExtensions[dlqChannelId] = new Dictionary<string, object>();
+                : context.ChannelExtensions[errorChannelId] = new Dictionary<string, object>();
 
-            channelExtensions["x-brighter-channel-role"] = "dead-letter";
+            channelExtensions["x-brighter-channel-role"] = channelRole;
             channelExtensions["x-brighter-source-channel"] = sourceChannelId;
         }
 
