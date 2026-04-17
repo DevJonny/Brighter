@@ -159,6 +159,8 @@ namespace Paramore.Brighter.AsyncAPI
 
                 InvokeSubscriptionBindingContributors(subscription, context, channelId, operationId);
 
+                EnrichChannel(context, channelId, subscription, publication: null);
+
                 await AddDeadLetterChannelAsync(subscription, channelId, context, ct).ConfigureAwait(false);
                 await AddInvalidMessageChannelAsync(subscription, channelId, context, ct).ConfigureAwait(false);
             }
@@ -231,6 +233,60 @@ namespace Paramore.Brighter.AsyncAPI
             channelExtensions["x-brighter-source-channel"] = sourceChannelId;
         }
 
+        private static void EnrichChannel(
+            GenerationContext context,
+            string channelId,
+            Subscription? subscription,
+            Publication? publication)
+        {
+            if (!context.Channels.TryGetValue(channelId, out var channel)) return;
+
+            var extensions = context.ChannelExtensions.TryGetValue(channelId, out var existing)
+                ? existing
+                : context.ChannelExtensions[channelId] = new Dictionary<string, object>();
+
+            if (subscription?.Name is { } name && !string.IsNullOrEmpty(name.Value))
+            {
+                extensions["x-brighter-consumer-subscription-name"] = name.Value;
+            }
+
+            if (publication != null)
+            {
+                string? producer = null;
+                if (publication.Type != null && !string.IsNullOrEmpty(publication.Type.Value))
+                {
+                    producer = publication.Type.Value;
+                }
+                else if (publication.RequestType != null)
+                {
+                    producer = publication.RequestType.Name;
+                }
+
+                if (producer != null)
+                {
+                    extensions["x-brighter-producer-cloudevents-type"] = producer;
+                }
+            }
+
+            extensions.TryGetValue("x-brighter-producer-cloudevents-type", out var producerExt);
+            extensions.TryGetValue("x-brighter-consumer-subscription-name", out var consumerExt);
+            var producerStr = producerExt as string;
+            var consumerStr = consumerExt as string;
+
+            if (producerStr != null && consumerStr != null)
+            {
+                channel.Description = $"Published by {producerStr}; consumed by {consumerStr}";
+            }
+            else if (producerStr != null)
+            {
+                channel.Description = $"Published by {producerStr}";
+            }
+            else if (consumerStr != null)
+            {
+                channel.Description = $"Consumed by {consumerStr}";
+            }
+        }
+
         private void InvokeSubscriptionBindingContributors(
             Subscription subscription,
             GenerationContext context,
@@ -267,9 +323,11 @@ namespace Paramore.Brighter.AsyncAPI
                 if (publication.Topic == null || string.IsNullOrEmpty(publication.Topic.Value))
                     continue;
 
-                await ProcessSourceAsync(
+                var (channelId, _) = await ProcessSourceAsync(
                     publication.Topic.Value, V3OperationAction.Send, publication.RequestType,
                     context, ct).ConfigureAwait(false);
+
+                EnrichChannel(context, channelId, subscription: null, publication);
             }
         }
 
