@@ -37,6 +37,18 @@ namespace Paramore.Brighter.AsyncAPI
         private const string NJsonSchemaGeneratorTypeName =
             "Paramore.Brighter.AsyncAPI.NJsonSchema.NJsonSchemaGenerator, Paramore.Brighter.AsyncAPI.NJsonSchema";
 
+        // Fully-qualified type names of optional transport binding contributors. Each entry is probed
+        // via Type.GetType at UseAsyncApi time; resolved types are registered as
+        // IAmASubscriptionBindingContributor singletons. Unresolved types are silently skipped so
+        // consumers only pay for the transports they reference.
+        private static readonly string[] TransportBindingContributorTypeNames =
+        {
+            "Paramore.Brighter.AsyncAPI.Kafka.KafkaSubscriptionBindingContributor, Paramore.Brighter.AsyncAPI.Kafka",
+            "Paramore.Brighter.AsyncAPI.Rmq.RmqSubscriptionBindingContributor, Paramore.Brighter.AsyncAPI.Rmq",
+            "Paramore.Brighter.AsyncAPI.AzureServiceBus.AzureServiceBusSubscriptionBindingContributor, Paramore.Brighter.AsyncAPI.AzureServiceBus",
+            "Paramore.Brighter.AsyncAPI.AWSSQS.SqsSubscriptionBindingContributor, Paramore.Brighter.AsyncAPI.AWSSQS"
+        };
+
         /// <summary>
         /// Registers the AsyncAPI document generator and its dependencies with the Brighter pipeline.
         /// Subscriptions are sourced from <see cref="IAmConsumerOptions"/> (registered by AddConsumers or AddServiceActivator).
@@ -61,6 +73,26 @@ namespace Paramore.Brighter.AsyncAPI
             // Register the default core subscription binding contributor. TryAddEnumerable keeps the
             // registration idempotent across repeated UseAsyncApi calls.
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IAmASubscriptionBindingContributor, CoreSubscriptionBindingContributor>());
+
+            // Auto-discover optional transport binding contributors (mirrors NJsonSchemaGenerator
+            // probing below). Each resolved type is registered as an additional
+            // IAmASubscriptionBindingContributor. Consumers targeting AOT/trim can opt out via
+            // AsyncApiOptions.DisableAutoBindingContributorDiscovery and call the transport-specific
+            // UseAsyncApi*Bindings() extension instead.
+            if (!options.DisableAutoBindingContributorDiscovery)
+            {
+                foreach (var typeName in TransportBindingContributorTypeNames)
+                {
+                    var contributorType = Type.GetType(typeName);
+                    if (contributorType != null)
+                    {
+                        services.TryAddEnumerable(new ServiceDescriptor(
+                            typeof(IAmASubscriptionBindingContributor),
+                            contributorType,
+                            ServiceLifetime.Singleton));
+                    }
+                }
+            }
 
             // Register default schema generator via reflection (NJsonSchema package)
             var generatorType = Type.GetType(NJsonSchemaGeneratorTypeName);

@@ -37,5 +37,14 @@ namespace Paramore.Brighter.AsyncAPI
         public IEnumerable<Assembly>? AssembliesToScan { get; set; }
         public bool DisableAssemblyScanning { get; set; }
         public IEnumerable<Publication>? SupplementalPublications { get; set; }
+
+        /// <summary>
+        /// When true, <see cref="AsyncApiBrighterBuilderExtensions.UseAsyncApi"/> will not probe for
+        /// optional transport binding contributor assemblies via reflection. Set this for AOT/trim
+        /// scenarios (where <see cref="System.Type.GetType(string)"/> is unreliable) and instead
+        /// register each contributor explicitly via the transport-specific <c>UseAsyncApi*Bindings()</c>
+        /// extension.
+        /// </summary>
+        public bool DisableAutoBindingContributorDiscovery { get; set; }
     }
 }
