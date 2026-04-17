@@ -372,7 +372,7 @@ namespace Paramore.Brighter.AsyncAPI
                 EnsurePlaceholderMessage(context.Messages, messageKey, messageName);
                 if (publication != null)
                 {
-                    AddPublicationMessageExtensions(context, messageKey, publication);
+                    ApplyPublicationToMessage(context, messageKey, publication);
                 }
             }
 
@@ -517,8 +517,69 @@ namespace Paramore.Brighter.AsyncAPI
 
             if (publication != null)
             {
-                AddPublicationMessageExtensions(context, messageKey, publication);
+                ApplyPublicationToMessage(context, messageKey, publication);
             }
+        }
+
+        private static void ApplyPublicationToMessage(
+            GenerationContext context,
+            string messageKey,
+            Publication publication)
+        {
+            if (context.Messages.TryGetValue(messageKey, out var message))
+            {
+                message.Headers = BuildHeadersSchema(publication);
+            }
+
+            AddPublicationMessageExtensions(context, messageKey, publication);
+        }
+
+        private static V3SchemaDefinition BuildHeadersSchema(Publication publication)
+        {
+            var properties = new JsonObject
+            {
+                ["id"] = new JsonObject { ["type"] = "string" },
+                ["source"] = new JsonObject { ["type"] = "string", ["format"] = "uri" },
+                ["type"] = new JsonObject { ["type"] = "string" },
+                ["specversion"] = new JsonObject { ["type"] = "string" },
+                ["time"] = new JsonObject { ["type"] = "string", ["format"] = "date-time" }
+            };
+
+            if (publication.DefaultHeaders != null)
+            {
+                foreach (var header in publication.DefaultHeaders)
+                {
+                    if (properties.ContainsKey(header.Key)) continue;
+                    properties[header.Key] = new JsonObject { ["type"] = InferJsonSchemaType(header.Value) };
+                }
+            }
+
+            var schemaRoot = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JsonArray("id", "source", "type", "specversion")
+            };
+
+            using var doc = JsonDocument.Parse(schemaRoot.ToJsonString());
+            return new V3SchemaDefinition
+            {
+                SchemaFormat = "application/schema+json;version=draft-07",
+                Schema = doc.RootElement.Clone()
+            };
+        }
+
+        private static string InferJsonSchemaType(object? value)
+        {
+            if (value == null) return "string";
+            return Type.GetTypeCode(value.GetType()) switch
+            {
+                TypeCode.Boolean => "boolean",
+                TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
+                    or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64 => "integer",
+                TypeCode.Single or TypeCode.Double or TypeCode.Decimal => "number",
+                _ => "string"
+            };
         }
 
         private static void AddPublicationMessageExtensions(
