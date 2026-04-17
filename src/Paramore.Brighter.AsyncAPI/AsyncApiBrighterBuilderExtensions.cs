@@ -110,7 +110,15 @@ namespace Paramore.Brighter.AsyncAPI
                     }
                 }
 
-                return new AsyncApiDocumentGenerator(resolvedOptions, schemaGenerator, subscriptions, allPublications, logger);
+                var subscriptionBindingContributors = sp.GetServices<IAmASubscriptionBindingContributor>();
+
+                return new AsyncApiDocumentGenerator(
+                    resolvedOptions,
+                    schemaGenerator,
+                    subscriptions,
+                    allPublications,
+                    logger,
+                    subscriptionBindingContributors);
             });
 
             return builder;

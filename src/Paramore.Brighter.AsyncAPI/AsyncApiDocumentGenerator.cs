@@ -49,7 +49,9 @@ namespace Paramore.Brighter.AsyncAPI
             Dictionary<string, V3OperationDefinition> Operations,
             Dictionary<string, V3MessageDefinition> Messages,
             Dictionary<string, Type> MessageTypeByKey,
-            HashSet<(string ChannelId, string Action)> CoveredChannelActions);
+            HashSet<(string ChannelId, string Action)> CoveredChannelActions,
+            Dictionary<string, IDictionary<string, object>> ChannelExtensions,
+            Dictionary<string, IDictionary<string, object>> OperationExtensions);
 
         private static readonly JsonElement s_emptyObject;
 
@@ -64,19 +66,22 @@ namespace Paramore.Brighter.AsyncAPI
         private readonly IEnumerable<Subscription>? _subscriptions;
         private readonly IEnumerable<Publication>? _publications;
         private readonly ILogger _logger;
+        private readonly IReadOnlyList<IAmASubscriptionBindingContributor> _subscriptionBindingContributors;
 
         public AsyncApiDocumentGenerator(
             AsyncApiOptions options,
             IAmASchemaGenerator schemaGenerator,
             IEnumerable<Subscription>? subscriptions,
             IEnumerable<Publication>? publications,
-            ILogger logger)
+            ILogger logger,
+            IEnumerable<IAmASubscriptionBindingContributor>? subscriptionBindingContributors = null)
         {
             _options = options;
             _schemaGenerator = schemaGenerator;
             _subscriptions = subscriptions;
             _publications = publications;
             _logger = logger;
+            _subscriptionBindingContributors = subscriptionBindingContributors?.ToArray() ?? Array.Empty<IAmASubscriptionBindingContributor>();
         }
 
         public async Task<V3AsyncApiDocument> GenerateAsync(CancellationToken ct = default)
@@ -86,7 +91,9 @@ namespace Paramore.Brighter.AsyncAPI
                 new Dictionary<string, V3OperationDefinition>(),
                 new Dictionary<string, V3MessageDefinition>(),
                 new Dictionary<string, Type>(),
-                new HashSet<(string ChannelId, string Action)>());
+                new HashSet<(string ChannelId, string Action)>(),
+                new Dictionary<string, IDictionary<string, object>>(),
+                new Dictionary<string, IDictionary<string, object>>());
 
             await AddSubscriptionsAsync(context, ct).ConfigureAwait(false);
             await AddPublicationsAsync(context, ct).ConfigureAwait(false);
@@ -127,9 +134,36 @@ namespace Paramore.Brighter.AsyncAPI
                 if (subscription.RoutingKey == null || string.IsNullOrEmpty(subscription.RoutingKey.Value))
                     continue;
 
-                await ProcessSourceAsync(
+                var (channelId, operationId) = await ProcessSourceAsync(
                     subscription.RoutingKey.Value, V3OperationAction.Receive, subscription.RequestType,
                     context, ct).ConfigureAwait(false);
+
+                InvokeSubscriptionBindingContributors(subscription, context, channelId, operationId);
+            }
+        }
+
+        private void InvokeSubscriptionBindingContributors(
+            Subscription subscription,
+            GenerationContext context,
+            string channelId,
+            string operationId)
+        {
+            if (_subscriptionBindingContributors.Count == 0) return;
+            if (!context.Channels.TryGetValue(channelId, out var channel)) return;
+            if (!context.Operations.TryGetValue(operationId, out var operation)) return;
+
+            foreach (var contributor in _subscriptionBindingContributors)
+            {
+                if (!contributor.CanContribute(subscription)) continue;
+
+                var channelExtensions = context.ChannelExtensions.TryGetValue(channelId, out var existingChannelExt)
+                    ? existingChannelExt
+                    : context.ChannelExtensions[channelId] = new Dictionary<string, object>();
+                var operationExtensions = context.OperationExtensions.TryGetValue(operationId, out var existingOpExt)
+                    ? existingOpExt
+                    : context.OperationExtensions[operationId] = new Dictionary<string, object>();
+
+                contributor.Contribute(subscription, new SubscriptionBindingContext(channel, operation, channelExtensions, operationExtensions));
             }
         }
 
@@ -150,7 +184,7 @@ namespace Paramore.Brighter.AsyncAPI
             }
         }
 
-        private async Task ProcessSourceAsync(
+        private async Task<(string ChannelId, string OperationId)> ProcessSourceAsync(
             string address,
             V3OperationAction action,
             Type? requestType,
@@ -191,6 +225,8 @@ namespace Paramore.Brighter.AsyncAPI
                     new V3ReferenceDefinition { Reference = $"#/channels/{channelId}/messages/{messageKey}" }
                 }
             };
+
+            return (channelId, operationId);
         }
 
         // codescene:ignore
