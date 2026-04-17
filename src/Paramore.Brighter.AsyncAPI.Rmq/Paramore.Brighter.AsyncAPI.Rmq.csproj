@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>RabbitMQ (AMQP) subscription binding contributor for Paramore.Brighter.AsyncAPI. Enriches generated AsyncAPI documents with AMQP channel and operation bindings sourced from RmqSubscription.</Description>
+    <PackageTags>AsyncAPI;RabbitMQ;AMQP;Bindings;Schema;Messaging;Command;Event;Command Processor;Service Activator;Brighter</PackageTags>
+    <TargetFrameworks>$(BrighterCoreTargetFrameworks)</TargetFrameworks>
+    <!-- Neuroglia.AsyncApi SDK is not strong-named; assemblies that reference it cannot be signed -->
+    <SignAssembly>false</SignAssembly>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    <PackageReference Include="Neuroglia.AsyncApi.Core"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paramore.Brighter.AsyncAPI\Paramore.Brighter.AsyncAPI.csproj"/>
+    <ProjectReference Include="..\Paramore.Brighter.MessagingGateway.RMQ.Sync\Paramore.Brighter.MessagingGateway.RMQ.Sync.csproj"/>
+    <ProjectReference Include="..\Paramore.Brighter.Extensions.DependencyInjection\Paramore.Brighter.Extensions.DependencyInjection.csproj"/>
+  </ItemGroup>
+</Project>
