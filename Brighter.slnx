@@ -188,6 +188,7 @@
   <Folder Name="/tests/">
     <File Path="tests/README.md" />
     <Project Path="tests/Paramore.Brighter.Analyzer.Tests/Paramore.Brighter.Analyzer.Tests.csproj" />
+    <Project Path="tests/Paramore.Brighter.AsyncAPI.AWSSQS.Tests/Paramore.Brighter.AsyncAPI.AWSSQS.Tests.csproj" />
     <Project Path="tests/Paramore.Brighter.AsyncAPI.AzureServiceBus.Tests/Paramore.Brighter.AsyncAPI.AzureServiceBus.Tests.csproj" />
     <Project Path="tests/Paramore.Brighter.AsyncAPI.Kafka.Tests/Paramore.Brighter.AsyncAPI.Kafka.Tests.csproj" />
     <Project Path="tests/Paramore.Brighter.AsyncAPI.Rmq.Tests/Paramore.Brighter.AsyncAPI.Rmq.Tests.csproj" />
@@ -230,6 +231,7 @@
   <Project Path="src/Paramore.Brighter.Analyzer.Package/Paramore.Brighter.Analyzer.Package.csproj" />
   <Project Path="src/Paramore.Brighter.Analyzer/Paramore.Brighter.Analyzer.csproj" />
   <Project Path="src/Paramore.Brighter.Archive.Azure/Paramore.Brighter.Archive.Azure.csproj" />
+  <Project Path="src/Paramore.Brighter.AsyncAPI.AWSSQS/Paramore.Brighter.AsyncAPI.AWSSQS.csproj" />
   <Project Path="src/Paramore.Brighter.AsyncAPI.AzureServiceBus/Paramore.Brighter.AsyncAPI.AzureServiceBus.csproj" />
   <Project Path="src/Paramore.Brighter.AsyncAPI.Kafka/Paramore.Brighter.AsyncAPI.Kafka.csproj" />
   <Project Path="src/Paramore.Brighter.AsyncAPI.NJsonSchema/Paramore.Brighter.AsyncAPI.NJsonSchema.csproj" />
