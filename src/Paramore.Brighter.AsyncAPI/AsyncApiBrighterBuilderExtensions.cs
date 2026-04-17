@@ -58,6 +58,10 @@ namespace Paramore.Brighter.AsyncAPI
             // Register SDK serialization services (IAsyncApiDocumentWriter, IAsyncApiDocumentReader)
             services.AddAsyncApiIO();
 
+            // Register the default core subscription binding contributor. TryAddEnumerable keeps the
+            // registration idempotent across repeated UseAsyncApi calls.
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IAmASubscriptionBindingContributor, CoreSubscriptionBindingContributor>());
+
             // Register default schema generator via reflection (NJsonSchema package)
             var generatorType = Type.GetType(NJsonSchemaGeneratorTypeName);
             if (generatorType != null)
