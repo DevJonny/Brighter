@@ -67,6 +67,22 @@ namespace Paramore.Brighter.AsyncAPI
         private readonly IEnumerable<Publication>? _publications;
         private readonly ILogger _logger;
         private readonly IReadOnlyList<IAmASubscriptionBindingContributor> _subscriptionBindingContributors;
+        private Dictionary<string, IDictionary<string, object>> _lastChannelExtensions = new();
+        private Dictionary<string, IDictionary<string, object>> _lastOperationExtensions = new();
+
+        /// <summary>
+        /// After <see cref="GenerateAsync"/> has run, exposes the <c>x-*</c> channel extensions
+        /// accumulated during generation, keyed by channel id. Used by downstream serializer
+        /// wrappers (and tests) since the <see cref="V3ChannelDefinition"/> type does not surface
+        /// an extensions bag.
+        /// </summary>
+        public IReadOnlyDictionary<string, IDictionary<string, object>> ChannelExtensions => _lastChannelExtensions;
+
+        /// <summary>
+        /// After <see cref="GenerateAsync"/> has run, exposes the <c>x-*</c> operation extensions
+        /// accumulated during generation, keyed by operation id.
+        /// </summary>
+        public IReadOnlyDictionary<string, IDictionary<string, object>> OperationExtensions => _lastOperationExtensions;
 
         public AsyncApiDocumentGenerator(
             AsyncApiOptions options,
@@ -98,6 +114,9 @@ namespace Paramore.Brighter.AsyncAPI
             await AddSubscriptionsAsync(context, ct).ConfigureAwait(false);
             await AddPublicationsAsync(context, ct).ConfigureAwait(false);
             await AddFromAssemblyScanningAsync(context, ct).ConfigureAwait(false);
+
+            _lastChannelExtensions = context.ChannelExtensions;
+            _lastOperationExtensions = context.OperationExtensions;
 
             var doc = new V3AsyncApiDocument
             {
@@ -139,7 +158,36 @@ namespace Paramore.Brighter.AsyncAPI
                     context, ct).ConfigureAwait(false);
 
                 InvokeSubscriptionBindingContributors(subscription, context, channelId, operationId);
+
+                await AddDeadLetterChannelAsync(subscription, channelId, context, ct).ConfigureAwait(false);
             }
+        }
+
+        private async Task AddDeadLetterChannelAsync(
+            Subscription subscription,
+            string sourceChannelId,
+            GenerationContext context,
+            CancellationToken ct)
+        {
+            if (subscription is not IUseBrighterDeadLetterSupport dlqSupport) return;
+
+            var dlqRoutingKey = dlqSupport.DeadLetterRoutingKey;
+            if (dlqRoutingKey == null || string.IsNullOrEmpty(dlqRoutingKey.Value)) return;
+
+            var (dlqChannelId, _) = await ProcessSourceAsync(
+                dlqRoutingKey.Value, V3OperationAction.Receive, subscription.RequestType,
+                context, ct).ConfigureAwait(false);
+
+            if (!context.Channels.TryGetValue(dlqChannelId, out var dlqChannel)) return;
+
+            dlqChannel.Description ??= $"Dead-letter channel for {subscription.RoutingKey!.Value}";
+
+            var channelExtensions = context.ChannelExtensions.TryGetValue(dlqChannelId, out var existing)
+                ? existing
+                : context.ChannelExtensions[dlqChannelId] = new Dictionary<string, object>();
+
+            channelExtensions["x-brighter-channel-role"] = "dead-letter";
+            channelExtensions["x-brighter-source-channel"] = sourceChannelId;
         }
 
         private void InvokeSubscriptionBindingContributors(
