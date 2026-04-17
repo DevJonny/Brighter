@@ -51,7 +51,10 @@ namespace Paramore.Brighter.AsyncAPI
             Dictionary<string, Type> MessageTypeByKey,
             HashSet<(string ChannelId, string Action)> CoveredChannelActions,
             Dictionary<string, IDictionary<string, object>> ChannelExtensions,
-            Dictionary<string, IDictionary<string, object>> OperationExtensions);
+            Dictionary<string, IDictionary<string, object>> OperationExtensions,
+            Dictionary<string, IDictionary<string, object>> MessageExtensions);
+
+        private static readonly Uri s_defaultPublicationSource = new("http://goparamore.io");
 
         private static readonly JsonElement s_emptyObject;
 
@@ -69,6 +72,7 @@ namespace Paramore.Brighter.AsyncAPI
         private readonly IReadOnlyList<IAmASubscriptionBindingContributor> _subscriptionBindingContributors;
         private Dictionary<string, IDictionary<string, object>> _lastChannelExtensions = new();
         private Dictionary<string, IDictionary<string, object>> _lastOperationExtensions = new();
+        private Dictionary<string, IDictionary<string, object>> _lastMessageExtensions = new();
 
         /// <summary>
         /// After <see cref="GenerateAsync"/> has run, exposes the <c>x-*</c> channel extensions
@@ -83,6 +87,14 @@ namespace Paramore.Brighter.AsyncAPI
         /// accumulated during generation, keyed by operation id.
         /// </summary>
         public IReadOnlyDictionary<string, IDictionary<string, object>> OperationExtensions => _lastOperationExtensions;
+
+        /// <summary>
+        /// After <see cref="GenerateAsync"/> has run, exposes the <c>x-*</c> message extensions
+        /// accumulated during generation, keyed by message component key. Used to surface
+        /// per-Publication CloudEvents metadata that has no home on the SDK's
+        /// <see cref="V3MessageDefinition"/> type.
+        /// </summary>
+        public IReadOnlyDictionary<string, IDictionary<string, object>> MessageExtensions => _lastMessageExtensions;
 
         public AsyncApiDocumentGenerator(
             AsyncApiOptions options,
@@ -109,6 +121,7 @@ namespace Paramore.Brighter.AsyncAPI
                 new Dictionary<string, Type>(),
                 new HashSet<(string ChannelId, string Action)>(),
                 new Dictionary<string, IDictionary<string, object>>(),
+                new Dictionary<string, IDictionary<string, object>>(),
                 new Dictionary<string, IDictionary<string, object>>());
 
             await AddSubscriptionsAsync(context, ct).ConfigureAwait(false);
@@ -117,6 +130,7 @@ namespace Paramore.Brighter.AsyncAPI
 
             _lastChannelExtensions = context.ChannelExtensions;
             _lastOperationExtensions = context.OperationExtensions;
+            _lastMessageExtensions = context.MessageExtensions;
 
             var doc = new V3AsyncApiDocument
             {
@@ -325,7 +339,7 @@ namespace Paramore.Brighter.AsyncAPI
 
                 var (channelId, _) = await ProcessSourceAsync(
                     publication.Topic.Value, V3OperationAction.Send, publication.RequestType,
-                    context, ct).ConfigureAwait(false);
+                    context, ct, publication).ConfigureAwait(false);
 
                 EnrichChannel(context, channelId, subscription: null, publication);
             }
@@ -336,7 +350,8 @@ namespace Paramore.Brighter.AsyncAPI
             V3OperationAction action,
             Type? requestType,
             GenerationContext context,
-            CancellationToken ct)
+            CancellationToken ct,
+            Publication? publication = null)
         {
             var channelId = GetUniqueChannelId(context.Channels, address);
 
@@ -348,13 +363,17 @@ namespace Paramore.Brighter.AsyncAPI
             {
                 messageKey = GetUniqueMessageKey(context.MessageTypeByKey, requestType);
                 messageName = requestType.Name;
-                await EnsureMessageAsync(context.Messages, context.MessageTypeByKey, messageKey, messageName, requestType, ct).ConfigureAwait(false);
+                await EnsureMessageAsync(context, messageKey, messageName, requestType, publication, ct).ConfigureAwait(false);
             }
             else
             {
                 messageKey = $"{channelId}Message";
                 messageName = messageKey;
                 EnsurePlaceholderMessage(context.Messages, messageKey, messageName);
+                if (publication != null)
+                {
+                    AddPublicationMessageExtensions(context, messageKey, publication);
+                }
             }
 
             AddChannelMessageRef(context.Channels, channelId, messageKey);
@@ -408,7 +427,7 @@ namespace Paramore.Brighter.AsyncAPI
 
                     var messageKey = GetUniqueMessageKey(context.MessageTypeByKey, type);
                     var messageName = type.Name;
-                    await EnsureMessageAsync(context.Messages, context.MessageTypeByKey, messageKey, messageName, type, ct).ConfigureAwait(false);
+                    await EnsureMessageAsync(context, messageKey, messageName, type, publication: null, ct).ConfigureAwait(false);
                     AddChannelMessageRef(context.Channels, channelId, messageKey);
 
                     var sendOpId = GetUniqueOperationId(context.Operations, "send", channelId);
@@ -471,14 +490,14 @@ namespace Paramore.Brighter.AsyncAPI
         }
 
         private async Task EnsureMessageAsync(
-            Dictionary<string, V3MessageDefinition> messages,
-            Dictionary<string, Type> messageTypeByKey,
+            GenerationContext context,
             string messageKey,
             string messageName,
             Type requestType,
+            Publication? publication,
             CancellationToken ct)
         {
-            if (!messages.TryGetValue(messageKey, out _))
+            if (!context.Messages.TryGetValue(messageKey, out _))
             {
                 var schema = await _schemaGenerator.GenerateAsync(requestType, ct).ConfigureAwait(false)
                     ?? EmptyObjectSchema();
@@ -490,10 +509,45 @@ namespace Paramore.Brighter.AsyncAPI
                     Payload = RewriteEmbeddedSchemaRefs(schema, messageKey)
                 };
 
-                if (messages.TryAdd(messageKey, message))
+                if (context.Messages.TryAdd(messageKey, message))
                 {
-                    messageTypeByKey[messageKey] = requestType;
+                    context.MessageTypeByKey[messageKey] = requestType;
                 }
+            }
+
+            if (publication != null)
+            {
+                AddPublicationMessageExtensions(context, messageKey, publication);
+            }
+        }
+
+        private static void AddPublicationMessageExtensions(
+            GenerationContext context,
+            string messageKey,
+            Publication publication)
+        {
+            var extensions = context.MessageExtensions.TryGetValue(messageKey, out var existing)
+                ? existing
+                : context.MessageExtensions[messageKey] = new Dictionary<string, object>();
+
+            if (publication.Type != null && !string.IsNullOrEmpty(publication.Type.Value))
+            {
+                extensions["x-cloudevents-type"] = publication.Type.Value;
+            }
+
+            if (publication.Source != null && publication.Source != s_defaultPublicationSource)
+            {
+                extensions["x-cloudevents-source"] = publication.Source.AbsoluteUri;
+            }
+
+            if (!string.IsNullOrEmpty(publication.Subject))
+            {
+                extensions["x-cloudevents-subject"] = publication.Subject!;
+            }
+
+            if (publication.DataSchema != null)
+            {
+                extensions["x-cloudevents-dataschema"] = publication.DataSchema.AbsoluteUri;
             }
         }
 
