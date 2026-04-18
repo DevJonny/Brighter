@@ -26,7 +26,7 @@ using System;
 
 namespace Paramore.Brighter.MessagingGateway.RMQ.Async
 {
-    public class RmqSubscription : Subscription
+    public class RmqSubscription : Subscription, IUseBrighterDeadLetterSupport
     {
 
         /// <summary>
@@ -37,7 +37,7 @@ namespace Paramore.Brighter.MessagingGateway.RMQ.Async
         /// <summary>
         /// The routing key for dead letter messages
         /// </summary>
-        public RoutingKey? DeadLetterRoutingKey { get; }
+        public RoutingKey? DeadLetterRoutingKey { get; set; }
         
         /// <summary>
         /// Is the channel mirrored across node in the cluster

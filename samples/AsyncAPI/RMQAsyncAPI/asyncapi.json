@@ -1,0 +1,245 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "RMQ AsyncAPI Sample",
+    "version": "1.0.0",
+    "description": "Sample demonstrating AsyncAPI 3.0 generation with RabbitMQ, showcasing subscription, publication, and assembly scanning discovery"
+  },
+  "servers": {
+    "rabbitmq": {
+      "host": "localhost:5672",
+      "protocol": "amqp",
+      "description": "Local RabbitMQ broker"
+    }
+  },
+  "defaultContentType": "application/json",
+  "channels": {
+    "payment_received": {
+      "address": "payment.received",
+      "messages": {
+        "PaymentReceivedEvent": {
+          "isReference": true,
+          "$ref": "#/components/messages/PaymentReceivedEvent"
+        }
+      },
+      "description": "Consumed by paramore.asyncapi.payment",
+      "servers": [],
+      "bindings": {
+        "amqp": {
+          "is": "queue",
+          "queue": {
+            "name": "payment.received",
+            "durable": true,
+            "vhost": "/"
+          },
+          "bindingVersion": "0.3.0"
+        }
+      },
+      "x-brighter-dlq-channel-name": "payment.received.DLQ",
+      "x-brighter-consumer-subscription-name": "paramore.asyncapi.payment"
+    },
+    "payment_received_DLQ": {
+      "address": "payment.received.DLQ",
+      "messages": {
+        "PaymentReceivedEvent": {
+          "isReference": true,
+          "$ref": "#/components/messages/PaymentReceivedEvent"
+        }
+      },
+      "description": "Dead-letter channel for payment.received",
+      "servers": [],
+      "x-brighter-channel-role": "dead-letter",
+      "x-brighter-source-channel": "payment_received"
+    },
+    "order_created": {
+      "address": "order.created",
+      "messages": {
+        "OrderCreatedEvent": {
+          "isReference": true,
+          "$ref": "#/components/messages/OrderCreatedEvent"
+        }
+      },
+      "description": "Published by com.paramore.brighter.samples.order.created",
+      "servers": [],
+      "x-brighter-producer-cloudevents-type": "com.paramore.brighter.samples.order.created"
+    }
+  },
+  "operations": {
+    "receive_payment_received": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/payment_received"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/payment_received/messages/PaymentReceivedEvent"
+        }
+      ],
+      "bindings": {
+        "amqp": {
+          "ack": true,
+          "bindingVersion": "0.3.0"
+        }
+      },
+      "x-brighter-subscription-name": "paramore.asyncapi.payment",
+      "x-brighter-message-pump-type": "reactor",
+      "x-brighter-performers": 1,
+      "x-brighter-requeue-count": -1,
+      "x-brighter-requeue-delay-ms": 0,
+      "x-brighter-unacceptable-message-limit": 0
+    },
+    "receive_payment_received_DLQ": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/payment_received_DLQ"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/payment_received_DLQ/messages/PaymentReceivedEvent"
+        }
+      ]
+    },
+    "send_order_created": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/order_created"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/order_created/messages/OrderCreatedEvent"
+        }
+      ]
+    }
+  },
+  "components": {
+    "messages": {
+      "PaymentReceivedEvent": {
+        "contentType": "application/json",
+        "payload": {
+          "schemaFormat": "application/schema\u002Bjson;version=draft-07",
+          "schema": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "title": "PaymentReceivedEvent",
+            "definitions": {
+              "Event": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "CorrelationId": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "Id": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/messages/PaymentReceivedEvent/payload/definitions/Event"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "PaymentId": {
+                    "type": "string"
+                  },
+                  "Amount": {
+                    "type": "number",
+                    "format": "decimal"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "name": "PaymentReceivedEvent"
+      },
+      "OrderCreatedEvent": {
+        "headers": {
+          "schemaFormat": "application/schema\u002Bjson;version=draft-07",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "format": "uri"
+              },
+              "type": {
+                "type": "string"
+              },
+              "specversion": {
+                "type": "string"
+              },
+              "time": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "id",
+              "source",
+              "type",
+              "specversion"
+            ]
+          }
+        },
+        "contentType": "application/json",
+        "payload": {
+          "schemaFormat": "application/schema\u002Bjson;version=draft-07",
+          "schema": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "title": "OrderCreatedEvent",
+            "definitions": {
+              "Event": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "CorrelationId": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "Id": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/messages/OrderCreatedEvent/payload/definitions/Event"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "OrderId": {
+                    "type": "string"
+                  },
+                  "Amount": {
+                    "type": "number",
+                    "format": "decimal"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "name": "OrderCreatedEvent",
+        "x-cloudevents-type": "com.paramore.brighter.samples.order.created",
+        "x-cloudevents-source": "https://paramore.io/samples/rmq",
+        "x-cloudevents-subject": "order",
+        "x-cloudevents-dataschema": "https://paramore.io/samples/schemas/order-created.json"
+      }
+    }
+  }
+}

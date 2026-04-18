@@ -26,7 +26,7 @@ using System;
 
 namespace Paramore.Brighter.MessagingGateway.RMQ.Sync
 {
-    public class RmqSubscription : Subscription
+    public class RmqSubscription : Subscription, IUseBrighterDeadLetterSupport
     {
         /// <summary>
         /// The name of  the queue to send rejects messages to
@@ -36,7 +36,7 @@ namespace Paramore.Brighter.MessagingGateway.RMQ.Sync
         /// <summary>
         /// The routing key for dead letter messages
         /// </summary>
-        public RoutingKey? DeadLetterRoutingKey { get; }
+        public RoutingKey? DeadLetterRoutingKey { get; set; }
         
         /// <summary>
         /// Is the channel mirrored across node in the cluster

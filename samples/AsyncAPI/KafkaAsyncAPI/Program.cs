@@ -29,6 +29,7 @@ using Microsoft.Extensions.Hosting;
 using Paramore.Brighter;
 using Paramore.Brighter.AsyncAPI;
 using Neuroglia.AsyncApi.v3;
+using Paramore.Brighter.AsyncAPI.Kafka;
 using Paramore.Brighter.Extensions.DependencyInjection;
 using Paramore.Brighter.MessagingGateway.Kafka;
 using Paramore.Brighter.ServiceActivator.Extensions.DependencyInjection;
@@ -47,43 +48,56 @@ var kafkaConfig = new KafkaMessagingGatewayConfiguration
 
 var kafkaMessageConsumerFactory = new KafkaMessageConsumerFactory(kafkaConfig);
 
-var producerRegistry = new KafkaProducerRegistryFactory(
-    kafkaConfig,
-    new KafkaPublication<OrderCreatedEvent>[]
+var kafkaPublications = new KafkaPublication<OrderCreatedEvent>[]
+{
+    new()
     {
-        new()
-        {
-            Topic = new RoutingKey("order.created"),
-            NumPartitions = 3,
-            MessageSendMaxRetries = 3,
-            MessageTimeoutMs = 1000,
-            MaxInFlightRequestsPerConnection = 1
-        }
-    }).Create();
+        Topic = new RoutingKey("order.created"),
+        NumPartitions = 3,
+        MessageSendMaxRetries = 3,
+        MessageTimeoutMs = 1000,
+        MaxInFlightRequestsPerConnection = 1,
+        Type = new CloudEventsType("com.paramore.brighter.samples.order.created"),
+        Source = new Uri("https://paramore.io/samples/kafka"),
+        Subject = "order",
+        DataSchema = new Uri("https://paramore.io/samples/schemas/order-created.json")
+    }
+};
+
+// Skip the producer registry when generating the AsyncAPI document so we don't
+// need a live Kafka broker. AsyncApiOptions.SupplementalPublications carries the
+// Publications into the generator directly.
+var generatingOnly = args.Length > 0 && args[0] == "--generate-asyncapi";
+var producerRegistry = generatingOnly
+    ? null
+    : new KafkaProducerRegistryFactory(kafkaConfig, kafkaPublications).Create();
 
 var host = new HostBuilder()
     .ConfigureServices((_, services) =>
     {
-        services.AddConsumers(options =>
+        var brighter = services.AddConsumers(options =>
+        {
+            options.Subscriptions = new Subscription[]
             {
-                options.Subscriptions = new Subscription[]
-                {
-                    new KafkaSubscription<PaymentReceivedEvent>(
-                        new SubscriptionName("paramore.asyncapi.payment"),
-                        new ChannelName("payment.received"),
-                        new RoutingKey("payment.received"),
-                        groupId: "kafka-asyncapi-sample",
-                        timeOut: TimeSpan.FromMilliseconds(200),
-                        messagePumpType: MessagePumpType.Reactor,
-                        makeChannels: OnMissingChannel.Create)
-                };
-                options.DefaultChannelFactory = new ChannelFactory(kafkaMessageConsumerFactory);
-            })
-            .AddProducers(configure =>
-            {
-                configure.ProducerRegistry = producerRegistry;
-            })
-            .UseAsyncApi(opts =>
+                new KafkaSubscription<PaymentReceivedEvent>(
+                    new SubscriptionName("paramore.asyncapi.payment"),
+                    new ChannelName("payment.received"),
+                    new RoutingKey("payment.received"),
+                    groupId: "kafka-asyncapi-sample",
+                    timeOut: TimeSpan.FromMilliseconds(200),
+                    messagePumpType: MessagePumpType.Reactor,
+                    makeChannels: OnMissingChannel.Create,
+                    deadLetterRoutingKey: new RoutingKey("payment.received.DLQ"))
+            };
+            options.DefaultChannelFactory = new ChannelFactory(kafkaMessageConsumerFactory);
+        });
+
+        if (producerRegistry != null)
+        {
+            brighter.AddProducers(configure => configure.ProducerRegistry = producerRegistry);
+        }
+
+        brighter.UseAsyncApi(opts =>
             {
                 opts.Title = "Kafka AsyncAPI Sample";
                 opts.Version = "1.0.0";
@@ -97,7 +111,12 @@ var host = new HostBuilder()
                         Description = "Local Kafka broker"
                     }
                 };
+                if (generatingOnly)
+                {
+                    opts.SupplementalPublications = kafkaPublications;
+                }
             })
+            .UseAsyncApiKafkaBindings()
             .AutoFromAssemblies();
     })
     .UseSerilog()

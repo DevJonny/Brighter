@@ -29,8 +29,9 @@ using Microsoft.Extensions.Hosting;
 using Paramore.Brighter;
 using Paramore.Brighter.AsyncAPI;
 using Neuroglia.AsyncApi.v3;
+using Paramore.Brighter.AsyncAPI.Rmq;
 using Paramore.Brighter.Extensions.DependencyInjection;
-using Paramore.Brighter.MessagingGateway.RMQ.Async;
+using Paramore.Brighter.MessagingGateway.RMQ.Sync;
 using Paramore.Brighter.ServiceActivator.Extensions.DependencyInjection;
 using RMQAsyncAPI.Events;
 using Serilog;
@@ -56,7 +57,11 @@ var producerRegistry = new RmqProducerRegistryFactory(
         {
             WaitForConfirmsTimeOutInMilliseconds = 1000,
             MakeChannels = OnMissingChannel.Create,
-            Topic = new RoutingKey("order.created")
+            Topic = new RoutingKey("order.created"),
+            Type = new CloudEventsType("com.paramore.brighter.samples.order.created"),
+            Source = new Uri("https://paramore.io/samples/rmq"),
+            Subject = "order",
+            DataSchema = new Uri("https://paramore.io/samples/schemas/order-created.json")
         }
     }).Create();
 
@@ -73,6 +78,9 @@ var host = new HostBuilder()
                         new RoutingKey("payment.received"),
                         timeOut: TimeSpan.FromMilliseconds(200),
                         messagePumpType: MessagePumpType.Reactor,
+                        isDurable: true,
+                        deadLetterChannelName: new ChannelName("payment.received.DLQ"),
+                        deadLetterRoutingKey: new RoutingKey("payment.received.DLQ"),
                         makeChannels: OnMissingChannel.Create)
                 };
                 options.DefaultChannelFactory = new ChannelFactory(rmqMessageConsumerFactory);
@@ -96,6 +104,7 @@ var host = new HostBuilder()
                     }
                 };
             })
+            .UseAsyncApiRmqBindings()
             .AutoFromAssemblies();
     })
     .UseSerilog()
