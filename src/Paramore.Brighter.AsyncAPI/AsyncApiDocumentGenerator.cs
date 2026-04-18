@@ -466,7 +466,7 @@ namespace Paramore.Brighter.AsyncAPI
             foreach (var type in types)
             {
                 if (type.IsAbstract || type.IsInterface) continue;
-                if (!typeof(IRequest).IsAssignableFrom(type)) continue;
+                if (!typeof(IRequest).IsAssignableFrom(type) && !typeof(IEvent).IsAssignableFrom(type)) continue;
 
                 var attr = type.GetCustomAttribute<PublicationTopicAttribute>();
                 if (attr == null) continue;
