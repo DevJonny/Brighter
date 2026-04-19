@@ -42,6 +42,14 @@ namespace Paramore.Brighter.AsyncAPI
     // incrementally across multiple loops (subscriptions, publications, assembly scanning) with
     // deduplication via dictionary TryAdd. The fluent builder's nested Action<> delegates don't
     // simplify this pattern and would obscure the deduplication logic.
+    //
+    // codescene:ignore module-level metrics
+    // Rationale: "Primitive Obsession" and "String Heavy Function Arguments" flag the use of
+    // string for channelIds, addresses, operationIds and messageKeys. These are spec-defined
+    // identifiers in AsyncAPI 3 (#/channels/{id}, #/operations/{id}) serialized as strings;
+    // wrapping them in value types would add ceremony without changing the contract.
+    // "Overall Code Complexity" is 4.19 (threshold 4) — marginal and driven by the orchestration
+    // method (GenerateAsync) which fans out to subscriptions, publications, and scanning.
     public sealed class AsyncApiDocumentGenerator : IAmAnAsyncApiDocumentGenerator
     {
         private sealed record GenerationContext(
@@ -156,6 +164,12 @@ namespace Paramore.Brighter.AsyncAPI
             return doc;
         }
 
+        // codescene:ignore
+        // Rationale: AddSubscriptionsAsync and AddPublicationsAsync share a loop-over-collection
+        // shape but diverge meaningfully: subscriptions add dead-letter/invalid-message error
+        // channels and a receive action; publications add a send action with a Publication
+        // argument. Extracting a common helper would require passing delegates for both branches
+        // and obscure the intent of each path.
         private async Task AddSubscriptionsAsync(
             GenerationContext context,
             CancellationToken ct)
@@ -446,24 +460,7 @@ namespace Paramore.Brighter.AsyncAPI
 
         private static IEnumerable<(Type type, string topic)> GetPublicationTopicTypes(Assembly assembly, ILogger logger)
         {
-            Type[] types;
-            try
-            {
-                types = assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "Some types in assembly {AssemblyName} could not be loaded during AsyncAPI scanning; {LoadedCount} of {TotalCount} types loaded. Loader exceptions: {LoaderExceptions}",
-                    assembly.FullName,
-                    ex.Types.Count(t => t != null),
-                    ex.Types.Length,
-                    string.Join("; ", ex.LoaderExceptions?.Select(e => e?.Message) ?? Array.Empty<string>()));
-                types = ex.Types.Where(t => t != null).ToArray()!;
-            }
-
-            foreach (var type in types)
+            foreach (var type in GetLoadableTypes(assembly, logger))
             {
                 if (type.IsAbstract || type.IsInterface) continue;
                 if (!typeof(IRequest).IsAssignableFrom(type) && !typeof(IEvent).IsAssignableFrom(type)) continue;
@@ -475,6 +472,25 @@ namespace Paramore.Brighter.AsyncAPI
                 if (string.IsNullOrEmpty(topic)) continue;
 
                 yield return (type, topic);
+            }
+        }
+
+        private static Type[] GetLoadableTypes(Assembly assembly, ILogger logger)
+        {
+            try
+            {
+                return assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Some types in assembly {AssemblyName} could not be loaded during AsyncAPI scanning; {LoadedCount} of {TotalCount} types loaded. Loader exceptions: {LoaderExceptions}",
+                    assembly.FullName,
+                    ex.Types.Count(t => t != null),
+                    ex.Types.Length,
+                    string.Join("; ", ex.LoaderExceptions?.Select(e => e?.Message) ?? Array.Empty<string>()));
+                return ex.Types.Where(t => t != null).ToArray()!;
             }
         }
 
@@ -766,12 +782,8 @@ namespace Paramore.Brighter.AsyncAPI
 
         private static void RewriteRefProperty(JsonObject obj, string definitionsPrefix, string defsPrefix)
         {
-            if (!obj.TryGetPropertyValue("$ref", out var refNode) ||
-                refNode is not JsonValue refValue ||
-                !refValue.TryGetValue<string>(out var refString))
-            {
+            if (obj["$ref"] is not JsonValue refValue || !refValue.TryGetValue<string>(out var refString))
                 return;
-            }
 
             if (refString.StartsWith("#/definitions/"))
             {
